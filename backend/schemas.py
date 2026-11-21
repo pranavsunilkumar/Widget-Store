@@ -1,13 +1,17 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
-# User schemas
+# --- User & Auth Schemas ---
 class UserBase(BaseModel):
     email: EmailStr
     name: str
 
 class UserCreate(UserBase):
+    password: str = Field(..., min_length=6)
+
+class UserLogin(BaseModel):
+    email: EmailStr
     password: str
 
 class User(UserBase):
@@ -19,7 +23,15 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
-# Widget Listing schemas
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: User
+
+class TokenData(BaseModel):
+    user_id: Optional[int] = None
+
+# --- Widget Listing Schemas ---
 class WidgetListingBase(BaseModel):
     name: str
     description: str
@@ -56,21 +68,30 @@ class WidgetListing(WidgetListingBase):
     class Config:
         from_attributes = True
 
-# Installed Widget schemas
+# --- Installed Widget Schemas ---
 class InstalledWidgetBase(BaseModel):
-    id: str  # UUID
+    id: str  # UUID from Flutter
+    listing_id: Union[str, int]
+    widget_type: Optional[str] = None
     name: str
-    config: Dict[str, Any]
+    config: Dict[str, Any] = Field(default_factory=dict)
+    state: Optional[Dict[str, Any]] = Field(default_factory=dict)
     is_enabled: bool = True
-    placement: Optional[str] = None
+    placement: Optional[str] = "homescreen"
 
 class InstalledWidgetCreate(InstalledWidgetBase):
-    user_id: int
-    listing_id: int
+    user_id: Optional[int] = None
+
+class InstalledWidgetUpdate(BaseModel):
+    name: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    state: Optional[Dict[str, Any]] = None
+    is_enabled: Optional[bool] = None
+    placement: Optional[str] = None
+    last_used: Optional[datetime] = None
 
 class InstalledWidget(InstalledWidgetBase):
     user_id: int
-    listing_id: int
     last_used: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -78,7 +99,47 @@ class InstalledWidget(InstalledWidgetBase):
     class Config:
         from_attributes = True
 
-# Widget Usage schemas
+# --- Notebook & Note Schemas (For Cloud Sync) ---
+class NoteEntrySync(BaseModel):
+    id: str
+    notebook_id: str
+    title: str = ""
+    content: str
+    raw_text: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    source_app: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class NotebookSync(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    color_hex: str = "#4F46E5"
+    icon_name: str = "book"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# --- Cloud Sync Payloads ---
+class SyncPushRequest(BaseModel):
+    installed_widgets: List[InstalledWidgetBase] = Field(default_factory=list)
+    notebooks: List[NotebookSync] = Field(default_factory=list)
+    notes: List[NoteEntrySync] = Field(default_factory=list)
+
+class SyncPullResponse(BaseModel):
+    user: User
+    installed_widgets: List[InstalledWidget]
+    notebooks: List[NotebookSync]
+    notes: List[NoteEntrySync]
+    synced_at: datetime
+
+# --- Widget Usage & Favorites Schemas ---
 class WidgetUsageBase(BaseModel):
     event_type: str
     duration_seconds: Optional[int] = None
@@ -95,7 +156,6 @@ class WidgetUsage(WidgetUsageBase):
     class Config:
         from_attributes = True
 
-# Favorite schemas
 class UserFavoriteBase(BaseModel):
     user_id: int
     listing_id: int
@@ -109,11 +169,3 @@ class UserFavorite(UserFavoriteBase):
     
     class Config:
         from_attributes = True
-
-# Token schemas (for future authentication)
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: Optional[str] = None
